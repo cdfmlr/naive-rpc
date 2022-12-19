@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"reflect"
 	"sync"
 )
+
+var Verbose = false
 
 // RemoteProcess is a function that will be called by remote.
 type RemoteProcess func(arg any) (ret any, err error)
@@ -58,8 +61,16 @@ func (s *server) ServeRPC(req *Request) *Response {
 		return errorResponse(req.Id, ErrMethodNotFound())
 	}
 
+	if Verbose {
+		log.Printf("ServeRPC request: method=%s, id=%d, params=%s\n", req.Method, *req.Id, req.Params)
+	}
+
 	// call method
 	resp := m.serveRequest(req)
+
+	if Verbose {
+		log.Printf("ServeRPC response: id=%d, result=%s, error=%v\n", *resp.Id, resp.Result, resp.Error)
+	}
 
 	return resp
 }
