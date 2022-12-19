@@ -20,7 +20,7 @@ func TestRequest_unmarshalParam(t *testing.T) {
 		want    any
 		wantErr bool
 	}{
-		{"nil", fields{nil}, args{nil}, nil, false},
+		{"nil", fields{nil}, args{nil}, reflect.Value{}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

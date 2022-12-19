@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 )
 
+// TODO: client RPC 业务逻辑 和 传输层、编码层 分离
+
 type Client interface {
 	// Call a remote method with arg and return the result in ret.
 	Call(method string, arg any, ret any) error

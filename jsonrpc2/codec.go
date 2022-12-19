@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
 )
 
@@ -18,14 +19,22 @@ type Request struct {
 	Id      *int64          `json:"id"`
 }
 
+func unmarshalRequest(data io.Reader, req *Request) error {
+	return json.NewDecoder(data).Decode(req)
+}
+
 // unmarshalParam parses the Params into given type t.
-func (r Request) unmarshalParam(t reflect.Type) (any, error) {
-	if t == nil {
-		return nil, nil
+// Returns the reflect.Value of a POINTER to the struct.
+// This is intended to be passed to call().
+//
+// e.g. inType is Foo, returns reflect.ValueOf(Foo{})
+func (r Request) unmarshalParam(inType reflect.Type) (reflect.Value, error) {
+	if inType == nil {
+		return reflect.Value{}, errors.New("inType should not be nil")
 	}
 
-	badValue := reflect.Zero(t)
-	dst := reflect.New(t)
+	badValue := reflect.Zero(inType)
+	dst := reflect.New(inType)
 
 	if r.Params == nil {
 		return badValue, errors.New("params should not be nil")
@@ -58,7 +67,8 @@ type Response struct {
 	Id      *int64          `json:"id"` // int or null
 }
 
-func (r *Response) setResult(result any) error {
+// marshalResult fills the Result field with the given value.
+func (r *Response) marshalResult(result any) error {
 	if result == nil {
 		return nil
 	}
@@ -85,6 +95,28 @@ func (r *Response) unmarshalResult(t reflect.Type) (any, error) {
 		return badValue, err
 	}
 	return dst.Interface(), nil
+}
+
+// marshal marshals the response into a byte slice.
+// This should be called after the Result or Error field is filled.
+func (r *Response) marshal(w io.Writer) error {
+	return json.NewEncoder(w).Encode(r)
+}
+
+// validate checks if the response is valid: either Result or Error is filled.
+func (r *Response) validate() error {
+	if r.JsonRpc != JsonRpc2 {
+		return errors.New("invalid jsonrpc version")
+	}
+	// neither
+	if r.Result == nil && r.Error == nil {
+		return errors.New("either result or error should not be nil")
+	}
+	// both
+	if r.Result != nil && r.Error != nil {
+		return errors.New("either result or error should not be nil")
+	}
+	return nil
 }
 
 // Error object for JSON-RPC 2.0

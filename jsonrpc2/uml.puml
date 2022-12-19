@@ -1,0 +1,91 @@
+@startuml
+'skinparam linetype ortho
+
+namespace jsonrpc2 {
+    interface Client  {
+        + Call(method string, arg any, ret any) error
+
+    }
+    class Error << (S,Aquamarine) >> {
+        + Code int
+        + Message string
+        + Data json.RawMessage
+
+        + Error() string
+        + WithReason(reason string) *Error
+
+    }
+    class Request << (S,Aquamarine) >> {
+        + JsonRpc string
+        + Method string
+        + Params json.RawMessage
+        + Id *int64
+
+        - unmarshalParam(t reflect.Type) (any, error)
+        - validate() error
+
+    }
+    class Response << (S,Aquamarine) >> {
+        + JsonRpc string
+        + Result json.RawMessage
+        + Error *Error
+        + Id *int64
+
+        - setResult(result any) error
+        - unmarshalResult(t reflect.Type) (any, error)
+
+    }
+    interface Server  {
+        + Register(name string, f any) error
+        + ServeHTTP(w http.ResponseWriter, r *http.Request)
+
+    }
+    class client << (S,Aquamarine) >> {
+        - serverAddr string
+        - nextId atomic.Int64
+
+        + Call(method string, arg any, ret any) error
+
+    }
+    class jsonrpc2.RemoteProcess << (T, #FF7700) >>  {
+    }
+
+    class method << (S,Aquamarine) >> {
+        - function reflect.Value
+        - inType reflect.Type
+        - outType reflect.Type
+
+        - makeFunction(f any) error
+        - makeInType() error
+        - makeOutType() error
+        - unmarshalParam(params json.RawMessage) (reflect.Value, error)
+        - call(param reflect.Value) (any, error)
+        - serveRequest(req *Request) *Response
+
+    }
+    class server << (S,Aquamarine) >> {
+        - mu sync.RWMutex
+        - methods <font color=blue>map</font>[string]*method
+
+        + Register(name string, f any) error
+        + ServeHTTP(w http.ResponseWriter, r *http.Request) 
+
+    }
+}
+
+"jsonrpc2.Client" <|-- "implements""jsonrpc2.client"
+"jsonrpc2.Server" <|-- "implements""jsonrpc2.server"
+
+"jsonrpc2.Response""uses" o-- "jsonrpc2.Error"
+"jsonrpc2.server""uses" o--right-- "jsonrpc2.method"
+
+"jsonrpc2.client""uses" o-- "jsonrpc2.Request"
+"jsonrpc2.client""uses" o-- "jsonrpc2.Response"
+
+"jsonrpc2.server""uses" o-- "jsonrpc2.Request"
+"jsonrpc2.server""uses" o-- "jsonrpc2.Response"
+"jsonrpc2.method""uses" o-- "jsonrpc2.RemoteProcess"
+
+"jsonrpc2.Server""RPC" ...left... "jsonrpc2.Client"
+
+@enduml
