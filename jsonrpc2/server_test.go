@@ -270,13 +270,13 @@ func Test_method_serveRequest(t *testing.T) {
 	}{
 		{"nil",
 			fields(*m), args{req: nil},
-			&Response{JsonRpc: JsonRpc2, Error: ErrInvalidRequest().WithReason("nil request")}},
+			&Response{JsonRpc: JsonRpc2, Error: ErrInvalidRequest().withReason("nil request")}},
 		{"empty",
 			fields(*m), args{req: &Request{}},
-			&Response{JsonRpc: JsonRpc2, Id: nil, Error: ErrInvalidParams().WithReason("params should not be nil")}},
+			&Response{JsonRpc: JsonRpc2, Id: nil, Error: ErrInvalidParams().withReason("params should not be nil")}},
 		{"noParam",
 			fields(*m), args{req: &Request{Id: intPtr(1)}},
-			&Response{JsonRpc: JsonRpc2, Id: intPtr(1), Error: ErrInvalidParams().WithReason("params should not be nil")}},
+			&Response{JsonRpc: JsonRpc2, Id: intPtr(1), Error: ErrInvalidParams().withReason("params should not be nil")}},
 		{"good",
 			fields(*m), args{req: &Request{Id: intPtr(1), Params: []byte(`2`)}},
 			&Response{JsonRpc: JsonRpc2, Id: intPtr(1), Result: []byte(`2`)}},
@@ -369,10 +369,14 @@ func Test_server_ServeHTTP(t *testing.T) {
 
 	go func() {
 		go func() {
-			http.Handle("/rpc-server-test", s)
+			st := NewHttpServerTransport("") // we don't need to start a server
+			st.Use(s)
+
+			http.Handle("/rpc-server-test", st)
 
 			close(chStart)
-			err := http.ListenAndServe(":5675", s)
+
+			err := http.ListenAndServe(":5675", nil)
 			if err != nil {
 				t.Error(err)
 				return
@@ -425,10 +429,10 @@ func Test_server_ServeHTTP(t *testing.T) {
 			&Response{JsonRpc: JsonRpc2, Id: intPtr(3), Error: ErrMethodNotFound()}},
 		{"badParams",
 			args{`{"jsonrpc": "2.0", "method": "add", "params": {"A": "foo"}, "id": 4}`},
-			&Response{JsonRpc: JsonRpc2, Id: intPtr(4), Error: ErrInvalidParams().WithReason("json: cannot unmarshal string into Go struct field .A of type int")}},
+			&Response{JsonRpc: JsonRpc2, Id: intPtr(4), Error: ErrInvalidParams().withReason("json: cannot unmarshal string into Go struct field .A of type int")}},
 		{"badJson",
 			args{`{"jsonrpc": "2.0", "met`},
-			&Response{JsonRpc: JsonRpc2, Id: nil, Error: ErrParseError().WithReason("unexpected EOF")}},
+			&Response{JsonRpc: JsonRpc2, Id: nil, Error: ErrParseError().withReason("unexpected EOF")}},
 	}
 
 	<-chStart

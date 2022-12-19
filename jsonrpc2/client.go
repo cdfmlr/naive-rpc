@@ -1,10 +1,8 @@
 package jsonrpc2
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
-	"net/http"
 	"sync/atomic"
 )
 
@@ -16,13 +14,13 @@ type Client interface {
 }
 
 type client struct {
-	serverAddr string
-	nextId     atomic.Int64
+	transport ClientTransport
+	nextId    atomic.Int64
 }
 
-func NewClient(serverAddr string) Client {
+func NewClient(transport ClientTransport) Client {
 	return &client{
-		serverAddr: serverAddr,
+		transport: transport,
 	}
 }
 
@@ -51,29 +49,18 @@ func (c *client) Call(method string, arg any, ret any) error {
 		return err
 	}
 
-	// request -> json
-	reqJson, err := json.Marshal(req)
+	// remote procedure call
+	rpcResp, err := c.transport.SendAndReceive(&req)
 	if err != nil {
 		return err
 	}
 
-	// send request
-	resp, err := http.Post(c.serverAddr, "application/json", bytes.NewReader(reqJson))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	// parse response json
-	var rpcResp Response
-	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
-		return err
-	}
-
+	// case 0: rpc error
 	if rpcResp.Error != nil {
 		return rpcResp.Error
 	}
 
+	// case 1: rpc success
 	// parse response result
 	if ret == nil {
 		return nil
@@ -83,7 +70,7 @@ func (c *client) Call(method string, arg any, ret any) error {
 		return errors.New("result should not be nil")
 	}
 
-	if err := json.Unmarshal(rpcResp.Result, ret); err != nil {
+	if err := rpcResp.unmarshalResult(ret); err != nil {
 		return err
 	}
 

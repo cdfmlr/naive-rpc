@@ -2,7 +2,6 @@ package jsonrpc2
 
 import (
 	"errors"
-	"net/http"
 	"reflect"
 	"testing"
 )
@@ -40,9 +39,11 @@ func Test_client_Call(t *testing.T) {
 		}
 
 		go func() {
-			http.Handle("/rpc-client-test", s)
+			st := NewHttpServerTransport(":5676")
+
 			close(chServerStart)
-			err := http.ListenAndServe(":5676", s)
+
+			err := st.Serve(s)
 			if err != nil {
 				t.Error(err)
 				return
@@ -54,7 +55,7 @@ func Test_client_Call(t *testing.T) {
 
 	// client
 
-	cli := NewClient("http://localhost:5676/rpc-client-test")
+	cli := NewClient(NewHttpClientTransport("http://localhost:5676/rpc-client-test"))
 
 	//intPtr := func(i int64) *int64 {
 	//	return &i

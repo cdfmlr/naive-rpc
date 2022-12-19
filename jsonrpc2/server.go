@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"reflect"
 	"sync"
 )
@@ -13,10 +12,8 @@ import (
 type RemoteProcess func(arg any) (ret any, err error)
 
 // Server register methods and Serve JSON-RPC 2.0 over HTTP.
-// It's a http.Handler.
 type Server interface {
 	Register(name string, f any) error // register a method f with its name, while f is something like the RemoteProcess.
-	http.Handler                       // ServeHTTP(ResponseWriter, *Request) TODO: 传输、RPC 逻辑 分离，这个应该是传输层来做
 	ServeRPC(req *Request) *Response
 }
 
@@ -51,41 +48,6 @@ func (s *server) Register(name string, f any) error {
 	return nil
 }
 
-// ServeHTTP implements http.Handler. It serves JSON-RPC 2.0 over HTTP.
-// TODO: 这个应该是传输层来做
-func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var req Request
-
-	// parse rpc request
-	if err := unmarshalRequest(r.Body, &req); err != nil {
-		err := writeJsonResponse(w,
-			ErrorResponse(nil, ErrParseError().WithReason(err.Error())))
-		if err != nil {
-			fmt.Println("Failed to write response: ", err)
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
-		return
-	}
-
-	if err := req.validate(); err != nil {
-		err := writeJsonResponse(w,
-			ErrorResponse(req.Id, ErrInvalidRequest().WithReason(err.Error())))
-		if err != nil {
-			fmt.Println("Failed to write response: ", err)
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
-		return
-	}
-
-	resp := s.ServeRPC(&req)
-
-	// write response
-	if err := writeJsonResponse(w, resp); err != nil {
-		fmt.Println("Failed to write response: ", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
 func (s *server) ServeRPC(req *Request) *Response {
 	// find method
 	s.mu.RLock()
@@ -93,26 +55,13 @@ func (s *server) ServeRPC(req *Request) *Response {
 	s.mu.RUnlock()
 
 	if !exists {
-		return ErrorResponse(req.Id, ErrMethodNotFound())
+		return errorResponse(req.Id, ErrMethodNotFound())
 	}
 
 	// call method
 	resp := m.serveRequest(req)
 
 	return resp
-}
-
-// writeJsonResponse helps to respond with JSON content to the client.
-// TODO: 这个应该是传输层来做
-func writeJsonResponse(w http.ResponseWriter, response *Response) error {
-	w.Header().Set("Content-Type", "application/json")
-	if response == nil {
-		return errors.New("nil response")
-	}
-	if err := response.validate(); err != nil {
-		return err
-	}
-	return response.marshal(w)
 }
 
 // method is the inner representation for a RemoteProcess.
@@ -239,7 +188,7 @@ func (p *method) call(param reflect.Value) (ret any, err error) {
 // serveRequest do unmarshalParam and call for a given request, returning the response.
 func (p *method) serveRequest(req *Request) (res *Response) {
 	if req == nil {
-		return ErrorResponse(nil, ErrInvalidRequest().WithReason("nil request"))
+		return errorResponse(nil, ErrInvalidRequest().withReason("nil request"))
 	}
 
 	res = &Response{
@@ -250,7 +199,7 @@ func (p *method) serveRequest(req *Request) (res *Response) {
 	// param, err := p.unmarshalParam(req.Params)  // deprecated
 	param, err := req.unmarshalParam(p.inType)
 	if err != nil {
-		res.Error = ErrInvalidParams().WithReason(err.Error())
+		res.Error = ErrInvalidParams().withReason(err.Error())
 		return
 	}
 
@@ -265,7 +214,7 @@ func (p *method) serveRequest(req *Request) (res *Response) {
 
 	if err = res.marshalResult(ret); err != nil {
 		res.Result = nil
-		res.Error = ErrInternalError().WithReason(err.Error())
+		res.Error = ErrInternalError().withReason(err.Error())
 		return
 	}
 
