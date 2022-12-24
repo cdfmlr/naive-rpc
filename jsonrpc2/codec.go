@@ -160,6 +160,8 @@ var (
 	ErrInvalidParams  = func() *Error { return &Error{Code: -32602, Message: "Invalid params"} }   // Invalid function parameter(s).
 	ErrInternalError  = func() *Error { return &Error{Code: -32603, Message: "Internal error"} }   // Internal JSON-RPC error.
 	ErrServerError    = func() *Error { return &Error{Code: -32000, Message: "Server error"} }     // -32000 to -32099: Reserved for implementation-defined server-errors.
+
+	ErrAtMostOnce = func() *Error { return &Error{Code: -2022, Message: "duplicated request: violate at-most-once"} }
 )
 
 // errorResponse helps to create a response for an error.

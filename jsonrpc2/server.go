@@ -18,12 +18,25 @@ type RemoteProcess func(arg any) (ret any, err error)
 type Server interface {
 	Register(name string, f any) error // register a method f with its name, while f is something like the RemoteProcess.
 	ServeRPC(req *Request) *Response
+
+	// WithAtMostOnce 是一个 Option: 执行 at-most-once 语意，消除重复 RPC 请求。
+	//
+	// WithAtMostOnce 原址设置当前 Server 执行 at-most-once，为了方便，该函数还会返回该 Server。
+	//
+	// e.g.
+	//     s := NewServer().WithAtMostOnce()
+	//     s.Register(...)
+	//     st := NewHttpServerTransport(":6666")
+	//     st.Serve(s)
+	WithAtMostOnce() Server
 }
 
 // server is a Server implementation.
 type server struct {
 	mu      sync.RWMutex
 	methods map[string]*method
+
+	atMostOnce *sync.Map // nil: disable, else: 执行 at-most-once 语意，消除重复 RPC 请求
 }
 
 // NewServer creates JSON-RPC 2.0 Server.
@@ -31,6 +44,12 @@ func NewServer() Server {
 	return &server{
 		methods: make(map[string]*method),
 	}
+}
+
+// WithAtMostOnce 原址设置当前 server 执行 at-most-once，并返回 Server 以供链式
+func (s *server) WithAtMostOnce() Server {
+	s.atMostOnce = new(sync.Map)
+	return s
 }
 
 // Register registers a method f with its name.
@@ -63,6 +82,13 @@ func (s *server) ServeRPC(req *Request) *Response {
 
 	if Verbose {
 		log.Printf("ServeRPC request: method=%s, id=%d, params=%s\n", req.Method, *req.Id, req.Params)
+	}
+
+	if s.atMostOnce != nil && req.Id != nil {
+		_, dup := s.atMostOnce.LoadOrStore(*req.Id, struct{}{})
+		if dup {
+			return errorResponse(req.Id, ErrAtMostOnce())
+		}
 	}
 
 	// call method
